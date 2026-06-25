@@ -15,8 +15,8 @@ app = modal.App("codefinetune-prep")
 volume = modal.Volume.from_name("finetune-vol", create_if_missing=True)
 
 image = modal.Image.debian_slim(python_version="3.11").pip_install(
-    "datasets>=2.18.0",
-    "huggingface_hub",
+    "datasets==2.21.0",
+    "huggingface_hub==0.26.2",
 )
 
 VOLUME_PATH = "/data"
@@ -29,7 +29,21 @@ VOLUME_PATH = "/data"
 )
 def prep_data():
     from datasets import load_dataset, concatenate_datasets
+    import datasets as datasets_lib
     import re
+    import shutil
+    import os
+
+    print(f"datasets library version: {datasets_lib.__version__}")
+
+    # Wipe any stale data from a previous run before writing fresh files.
+    # save_to_disk() will not overwrite an existing non-empty directory,
+    # so this avoids leftover dataset_info.json from an old/mismatched version.
+    for sub in ("train", "eval"):
+        path = f"{VOLUME_PATH}/data/{sub}"
+        if os.path.exists(path):
+            print(f"Removing stale directory: {path}")
+            shutil.rmtree(path)
 
     # ── Step 1: Load and convert to unified format ────────────────
     def convert_magicoder(ex):

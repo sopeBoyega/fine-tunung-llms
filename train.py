@@ -24,6 +24,7 @@ image = modal.Image.debian_slim(python_version="3.11").pip_install(
     "accelerate==1.0.1",
     "datasets==2.21.0",
     "huggingface_hub==0.26.2",
+    "rich",
 )
 
 VOLUME_PATH = "/data"
@@ -98,6 +99,8 @@ def train():
     print(f"Trainable params: {trainable:,} ({100 * trainable / total:.2f}% of total)")
 
     # ── Load datasets ────────────────────────────────────────────
+    import datasets as datasets_lib
+    print(f"datasets library version: {datasets_lib.__version__}")
     train_ds = load_from_disk(f"{VOLUME_PATH}/data/train")
     eval_ds = load_from_disk(f"{VOLUME_PATH}/data/eval")
 

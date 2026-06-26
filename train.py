@@ -32,7 +32,7 @@ MODEL_ID = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
 
 # Push the final adapter straight to your HF account when training finishes.
 # Set to None to skip the push and just keep the adapter on the volume.
-HF_PUSH_REPO = "Sope006/fine-tuning-llms"  # e.g. "your-username/qwen2.5-coder-1.5b-codefeedback-lora"
+HF_PUSH_REPO = "Sope006/qwen2.5-coder-1.5b-codefeedback-lora"  # e.g. "your-username/qwen2.5-coder-1.5b-codefeedback-lora"
 
 
 @app.function(
@@ -53,7 +53,7 @@ def train():
 
     login(token=os.environ["HF_TOKEN"])
 
-    LOCAL_OUT = "/tmp/training-output"
+    LOCAL_OUT = f"{VOLUME_PATH}/outputs/training-output"
     os.makedirs(LOCAL_OUT, exist_ok=True)
 
     # ── Tokenizer ────────────────────────────────────────────────
@@ -119,7 +119,7 @@ def train():
 
     training_args = SFTConfig(
         output_dir=LOCAL_OUT,
-        num_train_epochs=3,
+        num_train_epochs=1,
         per_device_train_batch_size=BATCH,
         gradient_accumulation_steps=ACCUM,
         per_device_eval_batch_size=BATCH,
@@ -142,19 +142,43 @@ def train():
         group_by_length=True,
         seed=42,
         packing=False,
-        max_length=SEQ_LEN,
+        max_seq_length=SEQ_LEN,
     )
+
+    from transformers import TrainerCallback
+
+    class VolumeCommitCallback(TrainerCallback):
+        """Commits the Modal volume every time a checkpoint is saved, so
+        progress survives even if the connection/container dies mid-run."""
+        def on_save(self, args, state, control, **kwargs):
+            volume.commit()
+            print(f"[checkpoint] step {state.global_step}: committed to volume")
+            return control
 
     trainer = SFTTrainer(
         model=model,
-        processing_class=tokenizer,
+        tokenizer=tokenizer,
         args=training_args,
         train_dataset=train_ds,
         eval_dataset=eval_ds,
+        callbacks=[VolumeCommitCallback()],
     )
 
     print("Starting training...")
-    trainer.train()
+    # Resume from the latest checkpoint on the volume if one exists, instead
+    # of always starting from scratch — protects against disconnects/crashes.
+    resume_checkpoint = None
+    if os.path.isdir(LOCAL_OUT):
+        checkpoints = [d for d in os.listdir(LOCAL_OUT) if d.startswith("checkpoint-")]
+        if checkpoints:
+            latest = max(checkpoints, key=lambda d: int(d.split("-")[1]))
+            resume_checkpoint = os.path.join(LOCAL_OUT, latest)
+            print(f"Found existing checkpoint, resuming from: {resume_checkpoint}")
+
+    if resume_checkpoint:
+        trainer.train(resume_from_checkpoint=resume_checkpoint)
+    else:
+        trainer.train()
     print("Training complete!")
 
     # ── Save adapter to volume (replaces the Drive copy step) ──────

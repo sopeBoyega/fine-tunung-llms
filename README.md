@@ -171,6 +171,4 @@ By default, `HF_PUSH_REPO` is set to `None`, so the adapter stays on the Modal v
 - Evaluation sampling uses `temperature=0.2`, so exact outputs may vary slightly between runs.
 - The scoring is heuristic, but it gives a concrete signal for whether the adapter shifted toward the desired style.
 
-## License
 
-No license has been specified yet. Add one before publishing if you want others to reuse or modify the project.
